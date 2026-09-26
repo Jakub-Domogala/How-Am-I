@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How Far Am I</title>
+<style>
+:root{color-scheme:dark light}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.5rem;text-align:center;padding:1.5rem;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  background:#0b0f14;color:#eaf2f8;
+  transition:background .4s;
+}
+@media (prefers-color-scheme: light){
+  body{background:#f4f8fb;color:#0b0f14}
+}
+#num{
+  font-size:min(24vw,13rem);font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+  cursor:pointer;user-select:none;
+  background:linear-gradient(180deg,#8ef5e0,#33d9b2);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+@media (prefers-color-scheme: light){
+  #num{background:linear-gradient(180deg,#0e9c7a,#08624d);-webkit-background-clip:text;background-clip:text}
+}
+#unit{font-size:1.3rem;opacity:.6;cursor:pointer;user-select:none}
+#reset{font-size:1rem;opacity:.55;cursor:pointer;user-select:none;margin-top:.25rem;min-height:1.3em}
+#acc{font-size:.85rem;opacity:.4;min-height:1.2em}
+#msg{font-size:1rem;opacity:.7;max-width:26rem}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+#start{
+  margin-top:.5rem;padding:.6rem 1.4rem;border-radius:2rem;
+  border:1px solid currentColor;background:transparent;color:inherit;
+  font-size:1rem;cursor:pointer;opacity:.85;
+}
+#start:active{opacity:.5}
+</style>
+</head>
+<body>
+<div id="num">--</div>
+<div id="unit">m</div>
+<div id="reset">reset home to current location</div>
+<div id="acc"></div>
+<div id="msg"></div>
+<button id="start" type="button">Enable Location</button>
+<script>
+var system="metric",home=null,lastFix=null,distM=null,
+    numEl=document.getElementById("num"),unitEl=document.getElementById("unit"),
+    resetEl=document.getElementById("reset"),accEl=document.getElementById("acc"),
+    msgEl=document.getElementById("msg"),startBtn=document.getElementById("start");
+
+try{var h=localStorage.getItem("home");if(h)home=JSON.parse(h);}catch(e){}
+
+function dist(a,b){
+  var R=6371000,toRad=Math.PI/180;
+  var dLat=(b.lat-a.lat)*toRad,dLon=(b.lon-a.lon)*toRad;
+  var s=Math.sin(dLat/2)*Math.sin(dLat/2)+
+        Math.cos(a.lat*toRad)*Math.cos(b.lat*toRad)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));
+}
+function render(){
+  if(distM==null)return;
+  if(system==="metric"){
+    if(distM<1000){numEl.textContent=Math.round(distM);unitEl.textContent="m"}
+    else{numEl.textContent=(distM/1000).toFixed(1);unitEl.textContent="km"}
+  }else{
+    var ft=distM*3.28084;
+    if(ft<5280){numEl.textContent=Math.round(ft);unitEl.textContent="ft"}
+    else{numEl.textContent=(ft/5280).toFixed(1);unitEl.textContent="mi"}
+  }
+}
+function toggleUnit(){system=system==="metric"?"imperial":"metric";render()}
+numEl.onclick=toggleUnit;unitEl.onclick=toggleUnit;
+resetEl.onclick=function(){
+  if(!lastFix)return;
+  home=lastFix;
+  try{localStorage.setItem("home",JSON.stringify(home))}catch(e){}
+  distM=0;
+  render();
+  msgEl.textContent="Home reset to your current location.";
+};
+
+function onSuccess(pos){
+  numEl.classList.remove("pulse");
+  var c=pos.coords;
+  accEl.textContent=c.accuracy!=null?"± "+Math.round(c.accuracy)+" m position accuracy":"";
+  if(c.accuracy!=null&&c.accuracy>30){
+    msgEl.textContent="Signal too weak for a reliable distance — try outdoors with a clear sky view.";
+    return;
+  }
+  lastFix={lat:c.latitude,lon:c.longitude};
+  if(home==null){
+    home=lastFix;
+    try{localStorage.setItem("home",JSON.stringify(home))}catch(e){}
+    msgEl.textContent="Home set to your current location.";
+  }else{
+    msgEl.textContent="";
+  }
+  distM=dist(home,lastFix);
+  render();
+}
+function onError(err){
+  numEl.classList.remove("pulse");
+  accEl.textContent="";
+  if(err.code===1)msgEl.textContent="Location permission denied. Reset the site's location permission and try again.";
+  else if(err.code===3)msgEl.textContent="Timed out getting a GPS fix. Try again outdoors with a clear sky view.";
+  else msgEl.textContent="Position unavailable right now. Try again outdoors with a clear sky view.";
+}
+startBtn.onclick=function(){
+  startBtn.style.display="none";
+  if(!("geolocation" in navigator)){
+    msgEl.textContent="Geolocation isn't supported on this device.";
+    return;
+  }
+  numEl.classList.add("pulse");
+  msgEl.textContent="Requesting location…";
+  navigator.geolocation.watchPosition(onSuccess,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+};
+</script>
+</body>
+</html>
