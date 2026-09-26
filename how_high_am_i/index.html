@@ -55,7 +55,7 @@ var unit="m",lastM=null,numEl=document.getElementById("num"),
 function render(){
   if(lastM==null)return;
   var v=unit==="m"?lastM:lastM*3.28084;
-  numEl.textContent=Math.round(v*10)/10;
+  numEl.textContent=Math.round(v);
   unitEl.textContent=unit==="m"?"meters":"feet";
 }
 function toggleUnit(){unit=unit==="m"?"ft":"m";render()}
