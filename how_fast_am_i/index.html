@@ -64,17 +64,20 @@ numEl.onclick=toggleUnit;unitEl.onclick=toggleUnit;
 
 function onSuccess(pos){
   numEl.classList.remove("pulse");
+  var acc=pos.coords.accuracy;
+  accEl.textContent=acc!=null?"± "+Math.round(acc)+" m position accuracy":"";
+  if(acc!=null&&acc>30){
+    msgEl.textContent="Signal too weak for a reliable speed reading — try outdoors with a clear sky view.";
+    return;
+  }
   var spd=pos.coords.speed;
   if(spd==null){
-    msgEl.textContent="This device isn't reporting speed (common on laptops/desktops — try a phone with GPS, outdoors, while moving).";
-    accEl.textContent="";
+    msgEl.textContent="This device isn't reporting speed right now (common indoors/on desktops — try outdoors while moving).";
     return;
   }
   lastMs=spd;
   render();
-  var acc=pos.coords.accuracy;
-  accEl.textContent=acc!=null?"± "+Math.round(acc)+" m position accuracy":"";
-  msgEl.textContent=acc!=null&&acc>30?"Low position accuracy — try outdoors with a clear sky view for a steadier reading.":"";
+  msgEl.textContent="";
 }
 function onError(err){
   numEl.classList.remove("pulse");
