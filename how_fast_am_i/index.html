@@ -50,17 +50,18 @@ body{
 <div id="msg"></div>
 <button id="start" type="button">Enable Location</button>
 <script>
-var unit="kmh",lastMs=null,peakMs=null,numEl=document.getElementById("num"),
-    unitEl=document.getElementById("unit"),peakEl=document.getElementById("peak"),
-    accEl=document.getElementById("acc"),msgEl=document.getElementById("msg"),
-    startBtn=document.getElementById("start");
+var unit="kmh",realMs=null,prevRealMs=null,trendSign=0,displayMs=null,peakMs=null,
+    lastGpsT=0,lastMotionT=0,lastFrame=0,
+    numEl=document.getElementById("num"),unitEl=document.getElementById("unit"),
+    peakEl=document.getElementById("peak"),accEl=document.getElementById("acc"),
+    msgEl=document.getElementById("msg"),startBtn=document.getElementById("start");
 
 try{var sp=localStorage.getItem("peakMs");if(sp!=null)peakMs=parseFloat(sp);}catch(e){}
 
 function conv(ms){return unit==="kmh"?ms*3.6:ms*2.23694}
 function render(){
-  if(lastMs==null)return;
-  var ms=lastMs<0.3?0:lastMs;
+  if(displayMs==null)return;
+  var ms=displayMs<0.3?0:displayMs;
   numEl.textContent=Math.round(conv(ms));
   unitEl.textContent=unit==="kmh"?"km/h":"mph";
   renderPeak();
@@ -90,7 +91,11 @@ function onSuccess(pos){
     msgEl.textContent="This device isn't reporting speed right now (common indoors/on desktops — try outdoors while moving).";
     return;
   }
-  lastMs=spd;
+  prevRealMs=realMs;
+  realMs=spd;
+  lastGpsT=performance.now();
+  trendSign=(prevRealMs==null||Math.abs(realMs-prevRealMs)<0.2)?0:(realMs>prevRealMs?1:-1);
+  displayMs=realMs;
   if(acc!=null&&acc<=15&&(peakMs==null||spd>peakMs)){
     peakMs=spd;
     try{localStorage.setItem("peakMs",peakMs)}catch(err){}
@@ -105,6 +110,32 @@ function onError(err){
   else if(err.code===3)msgEl.textContent="Timed out getting a GPS fix. Try again outdoors with a clear sky view.";
   else msgEl.textContent="Position unavailable right now. Try again outdoors with a clear sky view.";
 }
+function onMotion(e){
+  var a=e.acceleration;
+  if(!a||a.x==null||realMs==null)return;
+  var now=performance.now();
+  if(lastMotionT===0){lastMotionT=now;return}
+  var dt=(now-lastMotionT)/1000;
+  lastMotionT=now;
+  if(now-lastGpsT>3000||trendSign===0){displayMs=realMs}
+  else{
+    var mag=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+    displayMs=Math.max(0,displayMs+trendSign*mag*dt*0.3);
+  }
+  if(now-lastFrame<100)return;
+  lastFrame=now;
+  render();
+}
+function enableMotion(){
+  if(!window.DeviceMotionEvent)return;
+  if(typeof DeviceMotionEvent.requestPermission==="function"){
+    DeviceMotionEvent.requestPermission().then(function(state){
+      if(state==="granted")window.addEventListener("devicemotion",onMotion);
+    }).catch(function(){});
+  }else{
+    window.addEventListener("devicemotion",onMotion);
+  }
+}
 startBtn.onclick=function(){
   startBtn.style.display="none";
   if(!("geolocation" in navigator)){
@@ -114,6 +145,7 @@ startBtn.onclick=function(){
   numEl.classList.add("pulse");
   msgEl.textContent="Requesting location…";
   navigator.geolocation.watchPosition(onSuccess,onError,{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  enableMotion();
 };
 </script>
 </body>
