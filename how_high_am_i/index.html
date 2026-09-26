@@ -48,7 +48,7 @@ body{
 <div id="msg"></div>
 <button id="start" type="button">Enable Location</button>
 <script>
-var unit="m",lastM=null,numEl=document.getElementById("num"),
+var unit="m",lastM=null,lastAcc=null,numEl=document.getElementById("num"),
     unitEl=document.getElementById("unit"),accEl=document.getElementById("acc"),
     msgEl=document.getElementById("msg"),startBtn=document.getElementById("start");
 
@@ -57,6 +57,12 @@ function render(){
   var v=unit==="m"?lastM:lastM*3.28084;
   numEl.textContent=Math.round(v);
   unitEl.textContent=unit==="m"?"meters":"feet";
+  if(lastAcc==null){
+    accEl.textContent="no accuracy data — reading may be a placeholder, not real GPS";
+  }else{
+    var a=unit==="m"?lastAcc:lastAcc*3.28084;
+    accEl.textContent="± "+Math.round(a)+" "+(unit==="m"?"m":"ft")+" accuracy";
+  }
 }
 function toggleUnit(){unit=unit==="m"?"ft":"m";render()}
 numEl.onclick=toggleUnit;unitEl.onclick=toggleUnit;
@@ -70,14 +76,12 @@ function onSuccess(pos){
     return;
   }
   lastM=alt;
+  lastAcc=pos.coords.altitudeAccuracy;
   render();
-  var acc=pos.coords.altitudeAccuracy;
-  if(acc==null){
-    accEl.textContent="no accuracy data — reading may be a placeholder, not real GPS";
+  if(lastAcc==null){
     msgEl.textContent="This looks like WiFi/IP-based location, not GPS. Try a phone outdoors for a real altitude fix.";
   }else{
-    accEl.textContent="± "+Math.round(acc)+" m accuracy";
-    msgEl.textContent=acc>75?"Low accuracy — try outdoors with a clear sky view for a better fix.":"";
+    msgEl.textContent=lastAcc>75?"Low accuracy — try outdoors with a clear sky view for a better fix.":"";
   }
 }
 function onError(err){
