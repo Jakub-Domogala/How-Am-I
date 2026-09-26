@@ -3,7 +3,7 @@
 A collection of tiny, single-file websites — each under 14KB — that answer one question using your phone's sensors. No frameworks, no build step, no external requests.
 
 - [`how_high_am_i`](https://jakub-domogala.github.io/How-Am-I/how_high_am_i/) — current altitude
-- `how_fast_am_i` — current speed (coming soon)
+- [`how_fast_am_i`](https://jakub-domogala.github.io/How-Am-I/how_fast_am_i/) — current speed
 - `how_steep_am_i` — current incline (coming soon)
 - `pro` — all of the above combined (coming soon)
 
