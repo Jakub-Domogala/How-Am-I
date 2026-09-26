@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How High Am I</title>
+<style>
+:root{color-scheme:dark light}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.5rem;text-align:center;padding:1.5rem;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  background:#0b0f14;color:#eaf2f8;
+  transition:background .4s;
+}
+@media (prefers-color-scheme: light){
+  body{background:#f4f8fb;color:#0b0f14}
+}
+#num{
+  font-size:min(24vw,13rem);font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+  cursor:pointer;user-select:none;
+  background:linear-gradient(180deg,#8ec9ff,#4f8cff);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+@media (prefers-color-scheme: light){
+  #num{background:linear-gradient(180deg,#1a5fd6,#0b3d91);-webkit-background-clip:text;background-clip:text}
+}
+#unit{font-size:1.3rem;opacity:.6;cursor:pointer;user-select:none}
+#acc{font-size:.85rem;opacity:.4;min-height:1.2em}
+#msg{font-size:1rem;opacity:.7;max-width:26rem}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+</style>
+</head>
+<body>
+<div id="num" class="pulse">--</div>
+<div id="unit">m</div>
+<div id="acc"></div>
+<div id="msg">Requesting location…</div>
+<script>
+var unit="m",lastM=null,numEl=document.getElementById("num"),
+    unitEl=document.getElementById("unit"),accEl=document.getElementById("acc"),
+    msgEl=document.getElementById("msg");
+
+function render(){
+  if(lastM==null)return;
+  var v=unit==="m"?lastM:lastM*3.28084;
+  numEl.textContent=Math.round(v*10)/10;
+  unitEl.textContent=unit==="m"?"meters":"feet";
+}
+function toggleUnit(){unit=unit==="m"?"ft":"m";render()}
+numEl.onclick=toggleUnit;unitEl.onclick=toggleUnit;
+
+if(!("geolocation" in navigator)){
+  msgEl.textContent="Geolocation isn't supported on this device.";
+  numEl.classList.remove("pulse");
+}else{
+  navigator.geolocation.watchPosition(function(pos){
+    numEl.classList.remove("pulse");
+    var alt=pos.coords.altitude;
+    if(alt==null){
+      msgEl.textContent="This device isn't reporting altitude (common on laptops/desktops — try a phone with GPS, outdoors).";
+      accEl.textContent="";
+      return;
+    }
+    lastM=alt;
+    render();
+    var acc=pos.coords.altitudeAccuracy;
+    if(acc==null){
+      accEl.textContent="no accuracy data — reading may be a placeholder, not real GPS";
+      msgEl.textContent="This looks like WiFi/IP-based location, not GPS. Try a phone outdoors for a real altitude fix.";
+    }else{
+      accEl.textContent="± "+Math.round(acc)+" m accuracy";
+      msgEl.textContent=acc>75?"Low accuracy — try outdoors with a clear sky view for a better fix.":"";
+    }
+  },function(err){
+    numEl.classList.remove("pulse");
+    accEl.textContent="";
+    if(err.code===1)msgEl.textContent="Location permission denied. Allow access and reload to see your altitude.";
+    else if(err.code===3)msgEl.textContent="Timed out getting a GPS fix. Try again outdoors with a clear sky view.";
+    else msgEl.textContent="Position unavailable right now. Try again outdoors with a clear sky view.";
+  },{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+}
+</script>
+</body>
+</html>
