@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How Overloaded Am I</title>
+<style>
+:root{color-scheme:dark light}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.5rem;text-align:center;padding:1.5rem;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  background:#0b0f14;color:#eaf2f8;
+  transition:background .4s;
+}
+@media (prefers-color-scheme: light){
+  body{background:#f4f8fb;color:#0b0f14}
+}
+#num{
+  font-size:min(24vw,13rem);font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+  cursor:pointer;user-select:none;
+  background:linear-gradient(180deg,#d9b3ff,#a35bff);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+@media (prefers-color-scheme: light){
+  #num{background:linear-gradient(180deg,#7a1fd6,#4a0e91);-webkit-background-clip:text;background-clip:text}
+}
+#unit{font-size:1.3rem;opacity:.6;cursor:pointer;user-select:none}
+#peak{font-size:1rem;opacity:.55;cursor:pointer;user-select:none;margin-top:.25rem;min-height:1.3em}
+#msg{font-size:1rem;opacity:.7;max-width:26rem}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+#start{
+  margin-top:.5rem;padding:.6rem 1.4rem;border-radius:2rem;
+  border:1px solid currentColor;background:transparent;color:inherit;
+  font-size:1rem;cursor:pointer;opacity:.85;
+}
+#start:active{opacity:.5}
+</style>
+</head>
+<body>
+<div id="num">--</div>
+<div id="unit">g</div>
+<div id="peak"></div>
+<div id="msg"></div>
+<button id="start" type="button">Enable Motion</button>
+<script>
+var unit="g",lastG=null,peakG=null,
+    numEl=document.getElementById("num"),unitEl=document.getElementById("unit"),
+    peakEl=document.getElementById("peak"),msgEl=document.getElementById("msg"),
+    startBtn=document.getElementById("start");
+
+try{var sp=localStorage.getItem("peakG");if(sp!=null)peakG=parseFloat(sp);}catch(e){}
+
+function fmt(g){return unit==="g"?g:g*9.80665}
+function unitLabel(){return unit==="g"?"g":"m/s²"}
+function render(){
+  if(lastG==null)return;
+  numEl.textContent=fmt(lastG).toFixed(1);
+  unitEl.textContent=unitLabel();
+  renderPeak();
+}
+function renderPeak(){
+  peakEl.textContent=peakG==null?"":"peak "+fmt(peakG).toFixed(1)+" "+unitLabel()+" — tap to reset";
+}
+function toggleUnit(){unit=unit==="g"?"ms2":"g";render()}
+numEl.onclick=toggleUnit;unitEl.onclick=toggleUnit;
+peakEl.onclick=function(){
+  peakG=null;
+  try{localStorage.removeItem("peakG")}catch(e){}
+  renderPeak();
+};
+renderPeak();
+
+var lastFrame=0,gotReading=false,watchdog=null;
+function onMotion(e){
+  var a=e.accelerationIncludingGravity;
+  if(!a||a.x==null)return;
+  gotReading=true;
+  clearTimeout(watchdog);
+  var mag=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+  var g=mag/9.80665;
+  if(peakG==null||g>peakG){
+    peakG=g;
+    try{localStorage.setItem("peakG",peakG)}catch(err){}
+  }
+  var now=performance.now();
+  if(now-lastFrame<100)return;
+  lastFrame=now;
+  lastG=g;
+  numEl.classList.remove("pulse");
+  msgEl.textContent="";
+  render();
+}
+
+startBtn.onclick=function(){
+  startBtn.style.display="none";
+  if(!window.DeviceMotionEvent){
+    msgEl.textContent="Motion sensors aren't supported on this device.";
+    return;
+  }
+  numEl.classList.add("pulse");
+  msgEl.textContent="Requesting motion access…";
+  function begin(){
+    window.addEventListener("devicemotion",onMotion);
+    watchdog=setTimeout(function(){
+      if(!gotReading){
+        numEl.classList.remove("pulse");
+        msgEl.textContent="This device isn't reporting motion data (common on laptops/desktops — try a phone).";
+      }
+    },3000);
+  }
+  if(typeof DeviceMotionEvent.requestPermission==="function"){
+    DeviceMotionEvent.requestPermission().then(function(state){
+      if(state==="granted")begin();
+      else{
+        numEl.classList.remove("pulse");
+        msgEl.textContent="Motion access denied. Reset the site's motion permission and try again.";
+      }
+    }).catch(function(){
+      numEl.classList.remove("pulse");
+      msgEl.textContent="Couldn't request motion access.";
+    });
+  }else{
+    begin();
+  }
+};
+</script>
+</body>
+</html>
