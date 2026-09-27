@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How Fast Is My Heart</title>
+<style>
+:root{color-scheme:dark light}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.5rem;text-align:center;padding:1.5rem;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  background:#0b0f14;color:#eaf2f8;
+  transition:background .4s;
+}
+@media (prefers-color-scheme: light){
+  body{background:#f4f8fb;color:#0b0f14}
+}
+#num{
+  font-size:min(24vw,13rem);font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+  user-select:none;
+  background:linear-gradient(180deg,#ffb3b3,#ff4f4f);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+@media (prefers-color-scheme: light){
+  #num{background:linear-gradient(180deg,#d61a1a,#910b0b);-webkit-background-clip:text;background-clip:text}
+}
+#unit{font-size:1.3rem;opacity:.6}
+#msg{font-size:1rem;opacity:.7;max-width:26rem}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:.85}}
+#start{
+  margin-top:.5rem;padding:.6rem 1.4rem;border-radius:2rem;
+  border:1px solid currentColor;background:transparent;color:inherit;
+  font-size:1rem;cursor:pointer;opacity:.85;
+}
+#start:active{opacity:.5}
+</style>
+</head>
+<body>
+<div id="num">--</div>
+<div id="unit">bpm</div>
+<div id="msg">Cover your rear camera with a fingertip, then tap below.</div>
+<button id="start" type="button">Enable Camera</button>
+<script>
+var W=40,H=40,buf=[],detrended=[],peaks=[],lastBpm=null,lastSampleT=0,
+    video,canvas,ctx,
+    numEl=document.getElementById("num"),unitEl=document.getElementById("unit"),
+    msgEl=document.getElementById("msg"),startBtn=document.getElementById("start");
+
+function render(){
+  if(lastBpm==null)return;
+  numEl.textContent=Math.round(lastBpm);
+}
+
+function process(now){
+  if(buf.length<10)return;
+  var base=0,bn=0;
+  for(var i=buf.length-1;i>=0&&now-buf[i].t<1500;i--){base+=buf[i].v;bn++}
+  base/=bn;
+  var minV=Infinity,maxV=-Infinity;
+  for(i=0;i<buf.length;i++){
+    if(now-buf[i].t>3000)continue;
+    var dv=buf[i].v-base;
+    if(dv<minV)minV=dv;
+    if(dv>maxV)maxV=dv;
+  }
+  var amp=maxV-minV,rawAvg=buf[buf.length-1].v;
+
+  if(rawAvg<15||rawAvg>250||amp<1.5){
+    numEl.classList.add("pulse");
+    msgEl.textContent="Place your finger over the camera (and flash) and hold still.";
+    lastBpm=null;peaks=[];detrended=[];
+    return;
+  }
+  numEl.classList.remove("pulse");
+
+  detrended.push({t:now,v:buf[buf.length-1].v-base});
+  while(detrended.length&&now-detrended[0].t>3000)detrended.shift();
+
+  if(detrended.length>=3){
+    var prev=detrended[detrended.length-3],mid=detrended[detrended.length-2],next=detrended[detrended.length-1];
+    if(mid.v>prev.v&&mid.v>=next.v&&mid.v>amp*0.15){
+      if(!peaks.length||mid.t-peaks[peaks.length-1]>=300){
+        peaks.push(mid.t);
+        if(peaks.length>8)peaks.shift();
+      }
+    }
+  }
+  while(peaks.length&&now-peaks[0]>8000)peaks.shift();
+
+  if(peaks.length>=4){
+    var intervals=[];
+    for(i=1;i<peaks.length;i++)intervals.push(peaks[i]-peaks[i-1]);
+    var avgInt=intervals.reduce(function(a,b){return a+b},0)/intervals.length;
+    var bpm=60000/avgInt;
+    if(bpm>=40&&bpm<=220){
+      lastBpm=bpm;
+      msgEl.textContent="";
+      render();
+    }
+  }else{
+    msgEl.textContent="Measuring… hold still.";
+  }
+}
+
+function feedFrame(now){
+  requestAnimationFrame(feedFrame);
+  if(video.readyState<2)return;
+  if(now-lastSampleT<50)return;
+  lastSampleT=now;
+  ctx.drawImage(video,0,0,W,H);
+  var d=ctx.getImageData(0,0,W,H).data,sum=0,n=0;
+  for(var i=0;i<d.length;i+=4){sum+=d[i];n++}
+  buf.push({t:now,v:sum/n});
+  while(buf.length&&now-buf[0].t>6000)buf.shift();
+  process(now);
+}
+
+startBtn.onclick=function(){
+  startBtn.style.display="none";
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+    msgEl.textContent="Camera access isn't supported on this device.";
+    return;
+  }
+  numEl.classList.add("pulse");
+  msgEl.textContent="Requesting camera…";
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}}).then(function(stream){
+    var track=stream.getVideoTracks()[0];
+    var caps=track.getCapabilities?track.getCapabilities():{};
+    if(caps.torch){
+      track.applyConstraints({advanced:[{torch:true}]}).catch(function(){});
+      msgEl.textContent="Cover the camera with your fingertip and hold still.";
+    }else{
+      msgEl.textContent="No flash control here — turn your flashlight on manually, then cover both camera and flash.";
+    }
+    video=document.createElement("video");
+    video.setAttribute("playsinline","");
+    video.muted=true;
+    video.srcObject=stream;
+    video.play();
+    canvas=document.createElement("canvas");
+    canvas.width=W;canvas.height=H;
+    ctx=canvas.getContext("2d",{willReadFrequently:true});
+    requestAnimationFrame(feedFrame);
+  }).catch(function(){
+    numEl.classList.remove("pulse");
+    msgEl.textContent="Camera access denied. Reset the site's camera permission and try again.";
+  });
+};
+</script>
+</body>
+</html>
